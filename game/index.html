@@ -403,7 +403,8 @@ table.hist{width:100%;border-collapse:collapse;font-size:13px;font-variant-numer
       <div class="box">
         <h3>苦手なキー</h3>
         <div class="chips" id="weakAll"></div>
-        <p class="muted" id="weakNone">まだ記録がありません。打ち間違えたキーがここに集計されます。</p>
+        <p class="muted" id="weakNone">苦手なキーはありません。打ち間違えたキーがここに出ます。</p>
+        <p class="muted" style="margin:8px 0 0">数字は苦手度です。そのキーを正しく打つたびに少しずつ減り、0になると一覧から消えます。</p>
       </div>
       <div class="box">
         <h3>設定</h3>
@@ -615,6 +616,8 @@ const store={
 };
 const S=Object.assign({layout:'jis',sound:true,guide:true,diff:'normal',autoLearn:true,prefs:{}},store.get('settings',{}));
 const saveS=()=>store.set('settings',S);
+// 以前の版で自動的に覚えた「っ」の打ち方を一度だけ消す
+if(!S.v2){delete S.prefs['っ'];S.v2=true;saveS()}
 
 /* =====================================================================
    ローマ字判定エンジン
@@ -714,8 +717,8 @@ function cands(s,i){
 function learn(chunk,r,cs){
   if(!S.autoLearn)return;
   const P=S.prefs;
-  if(chunk[0]==='っ'&&chunk.length>1){P['っ']='double';learn(chunk.slice(1),r.slice(1),[]);return}
-  if(chunk==='っ'){P['っ']=r[0]==='l'?'ltu':'xtu';return}
+  if(chunk[0]==='っ'&&chunk.length>1){learn(chunk.slice(1),r.slice(1),[]);return}
+  if(chunk==='っ')return;
   if(chunk==='ん'){ if(cs.some(c=>c.r==='n'))P['ん']=(r==='n')?'n':'nn'; return }
   if(chunk.length===1&&SMALLS.includes(chunk)){P.small=r[0];return}
   const o=K[chunk]; if(!o||o.length<2)return;
@@ -738,8 +741,15 @@ class Typer{
       if(ex&&!longer)this.commit(ex,cs); else this.buf=nb;
       return true;
     }
+    // 打ちかけの部分がそれだけで完成している場合（例：「ん」を n 1回）は、確定して次の文字として試す。
+    // ただし次の文字としても合わなければ、打ち間違いとして元の状態に戻す（入力の途中経過は変えない）
     const ex=this.buf&&cs.find(c=>c.r===this.buf);
-    if(ex){this.commit(ex,cs); return this.input(k)}
+    if(ex){
+      const save={i:this.i,buf:this.buf,typed:this.typed},prefs=JSON.stringify(S.prefs);
+      this.commit(ex,cs);
+      if(this.input(k))return true;
+      Object.assign(this,save);S.prefs=JSON.parse(prefs);
+    }
     return false;
   }
   commit(c,cs){learn(this.s.substr(this.i,c.n),c.r,cs);this.i+=c.n;this.buf=''}
@@ -1030,15 +1040,27 @@ function renderGrowth(){
 }
 addEventListener('resize',()=>{if(screen==='growth')renderGrowth()});
 const weakAll=store.get('weak',{});
+// 苦手度：打ち間違えると +1、正しく打つと -0.25（4回正しく打てばミス1回分が消える）。0 になったら一覧から消える
+const WEAK_HEAL=.25, WEAK_MAX=30;
+let weakSaveT=null;
+function saveWeak(){clearTimeout(weakSaveT);weakSaveT=setTimeout(()=>store.set('weak',weakAll),400)}
 function addWeak(ch,local){
   if(ch==null||ch==='')return;
   const k=ch===' '?'Space':ch;
-  weakAll[k]=(weakAll[k]||0)+1; if(local)local[k]=(local[k]||0)+1;
-  store.set('weak',weakAll);
+  weakAll[k]=Math.min(WEAK_MAX,(weakAll[k]||0)+1); if(local)local[k]=(local[k]||0)+1;
+  saveWeak();
+}
+function healWeak(ch){
+  if(ch==null||ch==='')return;
+  const k=ch===' '?'Space':ch;
+  if(!weakAll[k])return;
+  weakAll[k]-=WEAK_HEAL;
+  if(weakAll[k]<=1e-6)delete weakAll[k];
+  saveWeak();
 }
 function weakChips(obj,n){
   return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n)
-    .map(([k,v])=>`<span class="chip">${esc(k.length===1?k.toUpperCase():k)}<i>${v}</i></span>`).join('');
+    .map(([k,v])=>`<span class="chip">${esc(k.length===1?k.toUpperCase():k)}<i>${Math.ceil(v)}</i></span>`).join('');
 }
 const REC=Object.assign({kawara:{},fight:{},ochi:{}},store.get('records',{}));
 const saveRec=()=>store.set('records',REC);
@@ -1103,7 +1125,7 @@ function nextKawara(){
 function kawaraKey(k){
   if(KW.busy)return;
   if(k===KW.target){
-    kbK.press(k);
+    kbK.press(k);healWeak(k);
     const rt=(performance.now()-KW.t0)/1000;
     let n=clamp(Math.round(10-(rt-0.35)/0.16),1,10);
     n=Math.max(1,n-KW.keyMiss*3);
@@ -1378,7 +1400,7 @@ function fightKey(k){
   const exp=s.typer.guide().rest[0];
   s.stats.keys++;
   if(s.typer.input(k)){
-    s.stats.ok++;kbF.press(k);sfx.key();
+    s.stats.ok++;kbF.press(k);sfx.key();healWeak(k);
     if(s.typer.done())wordDone(); else renderWord();
   }else{
     s.stats.miss++;kbF.press(k,true);addWeak(exp,s.weak);sfx.miss();onMiss();
@@ -1658,7 +1680,7 @@ function ocKey(k){
   let hit=null;OC.plates.forEach(p=>{if(p.ch===k&&(!hit||p.y>hit.y))hit=p});
   if(hit){
     OC.hits++;OC.plates.splice(OC.plates.indexOf(hit),1);
-    kbO.press(k);ocBreak(hit);sfx.crack(2);
+    kbO.press(k);ocBreak(hit);sfx.crack(2);healWeak(k);
   }else{
     OC.miss++;kbO.press(k,true);
     const tg=ocTarget();if(tg)addWeak(tg.ch,OC.weak);
