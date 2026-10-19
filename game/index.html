@@ -31,6 +31,8 @@ h1,h2,h3{text-wrap:balance;margin:0}
 /* ---------- 共通 ---------- */
 .btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-weight:700}
 .btn:hover{border-color:var(--gold)}
+.btn .kk{font:600 11px/1 ui-monospace,monospace;margin-left:6px;padding:2px 5px;border:1px solid currentColor;border-radius:4px;opacity:.55}
+.btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
 .btn.ghost{background:transparent}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -1791,6 +1793,7 @@ requestAnimationFrame(loop);
 /* =====================================================================
    結果・一時停止・設定
    ===================================================================== */
+let resReady=false;
 function showResult(o){
   const c=$('#resCard');
   const weak=o.weak&&Object.keys(o.weak).length?`<div class="set-h" style="margin-top:0">今回まちがえたキー</div><div class="chips" style="margin-bottom:14px">${weakChips(o.weak,6)}</div>`:'';
@@ -1799,9 +1802,12 @@ function showResult(o){
     `<dl class="rows">${o.rows.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`+weak+
     `<div class="advice">${esc(o.advice)}</div><div class="actions"></div>`;
   const act=c.querySelector('.actions');
+  resReady=false;setTimeout(()=>resReady=true,500); /* 打ち終わりの連打で誤って選ばないよう、出た直後は受け付けない */
   o.buttons.forEach(([label,fn,pri])=>{
-    const b=document.createElement('button');b.className='btn'+(pri?' primary':'');b.textContent=label;
-    b.onclick=()=>{$('#ovResult').hidden=true;fn()};act.appendChild(b);
+    const key=label==='メニュー'?'m':label==='もう一度'?'r':'n';
+    const b=document.createElement('button');b.className='btn'+(pri?' primary':'');
+    b.dataset.k=key;b.innerHTML=`${esc(label)} <kbd class="kk">${key.toUpperCase()}</kbd>`;
+    b.onclick=()=>{if(!resReady)return;$('#ovResult').hidden=true;fn()};act.appendChild(b);
   });
   $('#ovResult').hidden=false;
   const pb=act.querySelector('.primary')||act.lastElementChild;if(pb)pb.focus();
@@ -2017,6 +2023,19 @@ addEventListener('keydown',e=>{
     return;
   }
   if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(!$('#ovResult').hidden&&$('#ovSet').hidden){
+    /* 結果画面：←→で選び、Enterで決定。M=メニュー R=もう一度 N=次へ */
+    const bs=[...document.querySelectorAll('#resCard .actions .btn')];
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+      e.preventDefault();
+      const i=bs.indexOf(document.activeElement),d=e.key==='ArrowLeft'?-1:1;
+      bs[(i<0?bs.length-1:(i+d+bs.length)%bs.length)].focus();
+    }else if(resReady){
+      const b=bs.find(x=>x.dataset.k===e.key.toLowerCase());
+      if(b){e.preventDefault();b.click()}
+    }
+    return;
+  }
   if(screen==='menu'||screen==='growth'||screen==='ranking'||!$('#ovResult').hidden||!$('#ovSet').hidden)return;
   const ime=e.isComposing||e.key==='Process'||e.keyCode===229;
   if(e.key.length===1||ime)e.preventDefault();
