@@ -2098,7 +2098,7 @@ async function loadRank(){
   }catch(e){RK.status='err'}
   if(screen==='ranking')renderRank();
 }
-const RK_TABS=[['dan','段位'],['ochi','連撃'],['kawara','瓦割り'],['fight','格闘タイム']];
+const RK_TABS=[['dan','段位'],['kpm','打鍵速度'],['ochi','連撃'],['kawara','瓦割り'],['fight','格闘タイム']];
 const SEATS=['一','二','三','四'];
 function segButtons(el,items,cur,onPick){
   el.innerHTML='';
@@ -2107,6 +2107,7 @@ function segButtons(el,items,cur,onPick){
 function rkList(){
   const d=RK.data||{};
   if(RK.tab==='dan')return {desc:'格闘で決まる段位の上位4名です。',list:(d.dan||[]).map(x=>({...x,main:DAN[x.v]?DAN[x.v][1]:'',sub:x.sub+' 打/分'}))};
+  if(RK.tab==='kpm')return {desc:'格闘の自己ベスト（正確率90%以上の試合で最も速かった記録）の上位4名です。',list:(d.kpm||[]).map(x=>({...x,main:x.v+' 打/分',sub:''}))};
   if(RK.tab==='ochi')return {desc:'連撃で耐えた時間の上位4名です。',list:(d.ochi||[]).map(x=>({...x,main:Number(x.v).toFixed(1)+' 秒',sub:''}))};
   if(RK.tab==='kawara'){const i=RK.sub.kawara;return {desc:`瓦割り${KW_LEVELS[i].name}で割った枚数の上位4名です。`,list:((d.kawara||[])[i]||[]).map(x=>({...x,main:x.v+' 枚',sub:''}))}}
   const i=RK.sub.fight;return {desc:`${ENEMIES[i].name}に勝つまでの時間が短い4名です。`,list:((d.fight||[])[i]||[]).map(x=>({...x,main:fmtTime(x.v),sub:''}))};
