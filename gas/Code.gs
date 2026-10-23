@@ -106,12 +106,13 @@ function doGet(e) {
   const me = String(p.pid || '');
   const rows = sheet_(PL, PL_HEAD).getDataRange().getValues().slice(1)
     .filter(r => r[0] && r[1])
-    .map(r => ({pid: r[0], name: String(r[1]).replace(/^'/, ''), dan: DAN.indexOf(r[2]), danKpm: num_(r[3]), ochi: num_(r[5]),
+    .map(r => ({pid: r[0], name: String(r[1]).replace(/^'/, ''), dan: DAN.indexOf(r[2]), danKpm: num_(r[3]), pbKpm: num_(r[4]), ochi: num_(r[5]),
       skin: String(r[19] || ''), kw: [num_(r[6]), num_(r[7]), num_(r[8])], fight: [r[9], r[10], r[11], r[12]].map(x => x === '' ? null : Number(x))}));
   const top = (list, val, sub) => list.slice(0, 4).map(r => ({name: r.name, v: val(r), sub: sub ? sub(r) : null, skin: r.skin || '', me: r.pid === me}));
   return out_({
     ok: true,
     dan: top(rows.filter(r => r.dan >= 0).sort((a, b) => b.dan - a.dan || b.danKpm - a.danKpm), r => r.dan, r => r.danKpm),
+    kpm: top(rows.filter(r => r.pbKpm > 0).sort((a, b) => b.pbKpm - a.pbKpm), r => r.pbKpm),
     ochi: top(rows.filter(r => r.ochi > 0).sort((a, b) => b.ochi - a.ochi), r => r.ochi),
     kawara: [0, 1, 2].map(i => top(rows.filter(r => r.kw[i] > 0).sort((a, b) => b.kw[i] - a.kw[i]), r => r.kw[i])),
     fight: [0, 1, 2, 3].map(i => top(rows.filter(r => r.fight[i] != null && !isNaN(r.fight[i])).sort((a, b) => a.fight[i] - b.fight[i]), r => r.fight[i]))
