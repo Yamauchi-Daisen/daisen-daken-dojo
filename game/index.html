@@ -246,6 +246,11 @@ h1,h2,h3{text-wrap:balance;margin:0}
 .seat.me{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
 .seat.me .nm::after{content:"あなた";display:block;margin:4px auto 0;width:max-content;font-family:var(--body);font-size:11px;font-weight:700;color:var(--gold-ink);background:var(--gold);border-radius:99px;padding:1px 8px}
 .seat.empty{opacity:.55}
+.seat[data-skin]{cursor:pointer}
+.seat[data-skin]:hover,.seat[data-skin]:focus-visible{border-color:var(--gold);outline:none}
+.rk-char{margin-top:14px;height:42vh;min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center}
+.rk-char img{max-height:calc(100% - 28px);max-width:100%;object-fit:contain;filter:drop-shadow(0 0 24px rgba(233,180,68,.2))}
+.rk-char .rk-cn{font-size:13px;color:var(--mute)}
 .seat.empty .nm{color:var(--mute)}
 @media (max-width:640px){.seats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 table.rk td:first-child{font-family:var(--display);color:var(--gold);width:3em}
@@ -540,6 +545,7 @@ table.hist{width:100%;border-collapse:collapse;font-size:13px;font-variant-numer
       <div class="seats" id="rkGrid"></div>
       <p class="muted" id="rkMsg" hidden></p>
     </div>
+    <div class="rk-char" id="rkChar"><span class="muted" id="rkCharHint">名前にカーソルを合わせると、そのプレイヤーのキャラが表示されます</span><img id="rkCharImg" alt="" hidden><span class="rk-cn" id="rkCharName" hidden></span></div>
   </section>
 
   <!-- ================= 連撃 ================= -->
@@ -2392,7 +2398,7 @@ function chBuy(){
   if(!bt.dataset.armed){bt.dataset.armed='1';bt.textContent='もう一度押すと購入します';
     clearTimeout(bt._t);bt._t=setTimeout(()=>{bt.dataset.armed='';bt.textContent='購入する'},4000);return}
   clearTimeout(bt._t);
-  WAL.coins-=k.price;WAL.owned[k.id]=1;saveWal();S.skin=k.id;saveS();
+  WAL.coins-=k.price;WAL.owned[k.id]=1;saveWal();S.skin=k.id;saveS();syncRank();
   chRefresh();banner2(k.name+' を手に入れました');
 }
 function banner2(t){const e=$('#chName');const o=e.textContent;e.textContent=t;e.style.color='var(--gold)';setTimeout(()=>{e.style.color='';chRefresh()},1800)}
@@ -2404,7 +2410,7 @@ function drawChars(time){
 }
 $('#openChars').onclick=()=>show('chars');
 $('#setChars').onclick=()=>{$('#ovSet').hidden=true;show('chars')};
-$('#chOk').onclick=()=>{const k=skinOf(CHS.sel);if(skinOwned(k)){S.skin=k.id;saveS()}show('menu')};
+$('#chOk').onclick=()=>{const k=skinOf(CHS.sel);if(skinOwned(k)){S.skin=k.id;saveS();syncRank()}show('menu')};
 $('#chBuy').onclick=chBuy;
 $('#chCv').onclick=()=>{if(CHS.f){act(CHS.f,['punch','kick','win'][Math.random()*3|0],.45,1);CHS.cd=2.5}};
 function chCurLabel(){const e=$('#chCur');if(e)e.textContent=skinOf(S.skin).name}
@@ -2515,7 +2521,7 @@ function rankSummary(name){
   const di=danInfo(), ok=di.count>=DAN_N;
   const fight={};for(const k in REC.fight){const r=REC.fight[k];if(r&&r.time!=null)fight[k]={time:Math.round(r.time),diff:r.diff||'normal'}}
   const kawara={};for(const k in REC.kawara){const r=REC.kawara[k];if(r&&r.tiles!=null)kawara[k]=r.tiles}
-  return {dan:ok?di.i:-1,danKpm:ok?di.best:0,pbKpm:di.pb||0,ochi:(REC.ochi&&REC.ochi.best)||0,kawara,fight};
+  return {skin:skinOf(S.skin).id,dan:ok?di.i:-1,danKpm:ok?di.best:0,pbKpm:di.pb||0,ochi:(REC.ochi&&REC.ochi.best)||0,kawara,fight};
 }
 // 送れなかった記録はためておき、次の機会にまとめて送る
 let rkQueue=store.get('outbox',[]), rkSending=false;
@@ -2580,14 +2586,30 @@ function renderRank(){
       :'読み込み中…';
     return;
   }
+  rkShowChar(null);
   const R=rkList();
   $('#rkDesc').textContent=R.desc;msg.hidden=true;
   grid.innerHTML=SEATS.map((k,i)=>{
     const x=R.list[i];
     if(!x)return `<div class="seat empty"><div class="no">${k}</div><div class="nm">空席</div><div class="rec">挑戦者を待っています</div></div>`;
-    return `<div class="seat${x.me?' me':''}"><div class="no">${k}</div><div class="nm">${esc(String(x.name))}</div><div class="rec">${esc(x.main)}${x.sub?`<small>${esc(x.sub)}</small>`:''}</div></div>`;
+    return `<div class="seat${x.me?' me':''}" tabindex="0"${x.skin?` data-skin="${esc(String(x.skin))}"`:''}><div class="no">${k}</div><div class="nm">${esc(String(x.name))}</div><div class="rec">${esc(x.main)}${x.sub?`<small>${esc(x.sub)}</small>`:''}</div></div>`;
   }).join('');
 }
+function rkShowChar(id){
+  const im=$('#rkCharImg'),hint=$('#rkCharHint'),nm=$('#rkCharName');
+  const k=id&&SKINS.find(x=>x.id===id);
+  if(!k){im.hidden=true;nm.hidden=true;hint.hidden=false;return}
+  hint.hidden=true;nm.hidden=false;nm.textContent=k.name;
+  if(k.portraitSrc){if(im.getAttribute('src')!==k.portraitSrc)im.src=k.portraitSrc;im.hidden=false}else{im.hidden=true;im.removeAttribute('src')}
+}
+(function(){
+  const g=$('#rkGrid'),seatOf=e=>e.target.closest&&e.target.closest('.seat[data-skin]');
+  g.addEventListener('mouseover',e=>{const t=seatOf(e);if(t)rkShowChar(t.dataset.skin)});
+  g.addEventListener('focusin',e=>{const t=seatOf(e);if(t)rkShowChar(t.dataset.skin)});
+  g.addEventListener('click',e=>{const t=seatOf(e);if(t)rkShowChar(t.dataset.skin)});
+  g.addEventListener('mouseleave',()=>rkShowChar(null));
+  g.addEventListener('focusout',()=>rkShowChar(null));
+})();
 $('#openRank').onclick=()=>{show('ranking');if(RK.status!=='ok'||!RK.data)loadRank()};
 setTimeout(flushRecords,1500);
 

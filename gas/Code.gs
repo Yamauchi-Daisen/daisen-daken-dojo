@@ -13,7 +13,7 @@ const TZ = 'Asia/Tokyo';
 const PL_HEAD = ['ID','名前','段位','段位の基準(打/分)','格闘の自己ベスト(打/分)','連撃の最長(秒)',
   '瓦割り初級(枚)','瓦割り中級(枚)','瓦割り上級(枚)',
   '格闘最短:門番(秒)','格闘最短:兄弟子(秒)','格闘最短:師範代(秒)','格闘最短:道場主(秒)',
-  '稽古の回数','稽古した日数','直近7日の回数','総打鍵数','初回の稽古','最後の稽古'];
+  '稽古の回数','稽古した日数','直近7日の回数','総打鍵数','初回の稽古','最後の稽古','使用キャラ'];
 const LOG_HEAD = ['日時','名前','ID','稽古','内容','結果','記録','正確率','打鍵数'];
 
 function setup() {
@@ -90,7 +90,8 @@ function upsertPlayer_(pid, name, s, now) {
     num_(s.danKpm), num_(s.pbKpm), num_(s.ochi),
     num_(k[0]), num_(k[1]), num_(k[2]),
     ft(0), ft(1), ft(2), ft(3),
-    log.length, days, recent, keys, first, last];
+    log.length, days, recent, keys, first, last,
+    /^[A-Za-z0-9_]{1,24}$/.test(String(s.skin || '')) ? String(s.skin) : ''];
   const sh = sheet_(PL, PL_HEAD);
   const ids = sh.getRange(1, 1, Math.max(1, sh.getLastRow()), 1).getValues().map(r => r[0]);
   let row = ids.indexOf(pid) + 1;
@@ -105,13 +106,12 @@ function doGet(e) {
   const me = String(p.pid || '');
   const rows = sheet_(PL, PL_HEAD).getDataRange().getValues().slice(1)
     .filter(r => r[0] && r[1])
-    .map(r => ({pid: r[0], name: String(r[1]).replace(/^'/, ''), dan: DAN.indexOf(r[2]), danKpm: num_(r[3]), pb: num_(r[4]), ochi: num_(r[5]),
-      kw: [num_(r[6]), num_(r[7]), num_(r[8])], fight: [r[9], r[10], r[11], r[12]].map(x => x === '' ? null : Number(x))}));
-  const top = (list, val, sub) => list.slice(0, 4).map(r => ({name: r.name, v: val(r), sub: sub ? sub(r) : null, me: r.pid === me}));
+    .map(r => ({pid: r[0], name: String(r[1]).replace(/^'/, ''), dan: DAN.indexOf(r[2]), danKpm: num_(r[3]), ochi: num_(r[5]),
+      skin: String(r[19] || ''), kw: [num_(r[6]), num_(r[7]), num_(r[8])], fight: [r[9], r[10], r[11], r[12]].map(x => x === '' ? null : Number(x))}));
+  const top = (list, val, sub) => list.slice(0, 4).map(r => ({name: r.name, v: val(r), sub: sub ? sub(r) : null, skin: r.skin || '', me: r.pid === me}));
   return out_({
     ok: true,
     dan: top(rows.filter(r => r.dan >= 0).sort((a, b) => b.dan - a.dan || b.danKpm - a.danKpm), r => r.dan, r => r.danKpm),
-    kpm: top(rows.filter(r => r.pb > 0).sort((a, b) => b.pb - a.pb), r => r.pb),
     ochi: top(rows.filter(r => r.ochi > 0).sort((a, b) => b.ochi - a.ochi), r => r.ochi),
     kawara: [0, 1, 2].map(i => top(rows.filter(r => r.kw[i] > 0).sort((a, b) => b.kw[i] - a.kw[i]), r => r.kw[i])),
     fight: [0, 1, 2, 3].map(i => top(rows.filter(r => r.fight[i] != null && !isNaN(r.fight[i])).sort((a, b) => a.fight[i] - b.fight[i]), r => r.fight[i]))
